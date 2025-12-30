@@ -631,7 +631,7 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
 
     let prompt = `
         ROLE: Senior Visual Systems Lead & Expert Graphic Designer.
-        GOAL: Perform "Knowledge-Anchored Semantic Recomposition".
+        GOAL: Perform "Knowledge-Anchored Semantic Recomposition" with Intuition Fallback.
         
         CONTAINER CONTEXT:
         - Source: ${sourceData.container.containerName} (${sourceW}x${sourceH})
@@ -640,30 +640,40 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
         LAYER HIERARCHY (JSON):
         ${JSON.stringify(layerAnalysisData.slice(0, 40))}
 
-        KNOWLEDGE INTEGRATION PROTOCOL (MANDATORY):
-        1. KNOWLEDGE AS TRUTH: The provided [GLOBAL PROJECT KNOWLEDGE] rules are Hard Constraints. They override your personal aesthetic preferences if a conflict exists.
-        2. RULE CITATION: Your 'reasoning' must explicitly cite which Brand Rule or Visual Anchor pattern you are following. (e.g., "Per Brand Rule #1..." or "Matching the spacing rhythm of Visual Anchor #2...").
-        3. VISUAL ANCHOR ANALYSIS: Study the attached Visual Reference images for Spatial Rhythm. If the references show airy layouts, maximize white space. If they show dense layouts, tighten the composition.
-        
+        KNOWLEDGE SCOPING PROTOCOL:
+        You are analyzing the specific container: "${targetData.name}".
+        Within the GLOBAL PROJECT KNOWLEDGE (if provided below), you must act as a 'Knowledge Scout.' 
+        Search only for sections, headers, or bullet points that semantically relate to "${targetData.name}" or its direct visual function. 
+        Ignore any rules belonging to other containers (e.g., if analyzing REEL, ignore BONUS or UI rules) to prevent cross-contamination.
+
+        INTUITION FALLBACK PROTOCOL:
+        If the provided Knowledge Scoping pass yields no specific results for the container "${targetData.name}", you must revert to your primary persona as a 'Senior Visual Systems Lead.' 
+        Use your expert design intuition to solve for balance, hierarchy, and optical weight.
+
         GROUNDING PROTOCOL:
-        - Link every visual observation to a Metadata ID [layer-ID].
-        - Use the Image for visual auditing and JSON for coordinate mapping.
-        - The top-left corner (0,0) of your visual workspace is the top-left of the Target Container (${targetData.name}).
+        1. Link every visual observation to a Metadata ID [layer-ID] using the deterministic path IDs provided in the JSON hierarchy.
+        2. Use the Image for visual auditing and JSON for coordinate mapping.
+        3. The top-left corner (0,0) of your visual workspace is the top-left of the Target Container (${targetData.name}).
 
         OPERATIONAL CONSTRAINTS:
-        - NO NEW ELEMENTS: Strictly forbidden.
-        - NO DELETION: Strictly forbidden. Every layer must be accounted for.
-        - NO CROPPING: Strictly forbidden.
+        - NO NEW ELEMENTS: Strictly forbidden. Do not add assets or effects.
+        - NO DELETION: Strictly forbidden. Every layer in the JSON must remain visible and accounted for.
+        - NO CROPPING: Strictly forbidden. Use scale and position only.
         - METHOD 'GEOMETRIC': 'generativePrompt' MUST be "".
 
         JSON OUTPUT RULES:
-        - Leading reasoning must justify 'overrides' by citing specific brand constraints or visual patterns.
-        - 'knowledgeApplied' must be set to true if Knowledge rules were used to calculate offsets/scale.
+        - Leading reasoning must justify 'overrides' by citing specific brand constraints (if found) or expert intuition.
+        - 'knowledgeApplied' must be set to true if Knowledge rules were explicitly used.
         - Your 'overrides' must accurately map to the 'layerId' strings provided in the hierarchy.
     `;
     
     if (knowledgeContext && knowledgeContext.rules) {
-        prompt = `[GLOBAL PROJECT KNOWLEDGE - MANDATORY]\n${knowledgeContext.rules}\n\nApply the above brand rules to your critique and recomposition.\n\n` + prompt;
+        prompt = `
+        [START KNOWLEDGE]
+        ${knowledgeContext.rules}
+        [END KNOWLEDGE]
+        
+        ` + prompt;
     }
     
     if (isRefining) {
@@ -745,14 +755,17 @@ export const DesignAnalystNode = memo(({ id, data }: NodeProps<PSDNodeData>) => 
                     // NEW: Reasoning First with Description to enforce audit logic
                     reasoning: { 
                         type: Type.STRING,
-                        description: "MANDATORY: A professional 'Design Audit' paragraph. Critique the visual hierarchy, balance, and optical weight before proposing changes."
+                        description: `MANDATORY: A professional 'Design Audit' paragraph. Critique the visual hierarchy, balance, and optical weight before proposing changes. Your reasoning must explicitly state whether you found container-specific rules to follow for "${targetData.name}" or if you are applying 'Expert Intuition' because no relevant rules were found for this container.`
                     },
                     method: { type: Type.STRING, enum: ['GEOMETRIC', 'GENERATIVE', 'HYBRID'] },
                     suggestedScale: { type: Type.NUMBER },
                     anchor: { type: Type.STRING, enum: ['TOP', 'CENTER', 'BOTTOM', 'STRETCH'] },
                     generativePrompt: { type: Type.STRING },
                     clearance: { type: Type.BOOLEAN, description: "Set to true when resetting from Generative back to Geometric" },
-                    knowledgeApplied: { type: Type.BOOLEAN, description: "Set to true ONLY if you explicitly used the provided Knowledge/Brand Rules to influence the layout." },
+                    knowledgeApplied: { 
+                        type: Type.BOOLEAN, 
+                        description: `Set to TRUE only if you identified and applied a rule specific to "${targetData.name}" from the knowledge base. Set to FALSE if you relied on general design intuition.` 
+                    },
                     overrides: {
                         type: Type.ARRAY,
                         items: {
